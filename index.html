@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitoring HR dan Temperatur</title>
+  <style>
+    :root {
+      --blue: #1769aa;
+      --blue-dark: #124f80;
+      --bg: #f3f6fa;
+      --line: #dce3eb;
+      --text: #1e293b;
+      --muted: #64748b;
+      --white: #fff;
+      --red: #b42318;
+      --green: #137547;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px 14px; background: var(--bg);
+      color: var(--text); font-family: Arial, Helvetica, sans-serif;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    header { margin-bottom: 20px; }
+    h1 { margin: 0 0 7px; font-size: 25px; }
+    .subtitle { color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .card {
+      background: var(--white); border: 1px solid var(--line);
+      border-radius: 14px; padding: 20px; margin-bottom: 16px;
+      box-shadow: 0 3px 12px rgba(15, 23, 42, .04);
+    }
+    h2 { margin: 0 0 16px; font-size: 18px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 13px; }
+    label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+    input {
+      width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1;
+      border-radius: 8px; font-size: 15px; background: white; color: var(--text);
+    }
+    input:focus { outline: 2px solid #bfdbfe; border-color: var(--blue); }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 16px; }
+    button {
+      border: 0; border-radius: 8px; padding: 11px 15px;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      background: var(--blue); color: white;
+    }
+    button:hover { background: var(--blue-dark); }
+    button.secondary { background: #e8eef5; color: #243447; }
+    button.secondary:hover { background: #dbe5ef; }
+    button.danger { background: #fff0ee; color: var(--red); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .status {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      color: var(--muted); font-size: 13px; margin-top: 12px;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #94a3b8; }
+    .dot.connected { background: #16a34a; }
+    .note { font-size: 12px; line-height: 1.55; color: var(--muted); margin: 12px 0 0; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 500px; }
+    th, td { padding: 11px 10px; border-bottom: 1px solid var(--line); text-align: left; font-size: 14px; }
+    th { background: #f8fafc; color: #475569; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    td.empty { color: var(--muted); text-align: center; padding: 25px; }
+    .table-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+    .count { color: var(--muted); font-size: 13px; }
+    footer { color: var(--muted); font-size: 12px; text-align: center; padding: 8px; }
+    @media (max-width: 620px) {
+      body { padding: 16px 10px; }
+      .card { padding: 15px; }
+      .grid { grid-template-columns: 1fr; }
+      h1 { font-size: 22px; }
+      button { flex: 1 1 auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Monitoring Detak Jantung & Temperatur</h1>
+      <div class="subtitle">Website untuk menerima data dari ESP32 melalui Bluetooth, menyimpan hasil pengukuran, dan mengunduh data.</div>
+    </header>
+
+    <section class="card">
+      <h2>Input Data</h2>
+      <div class="grid">
+        <div>
+          <label for="nama">Nama</label>
+          <input id="nama" type="text" placeholder="Masukkan nama">
+        </div>
+        <div>
+          <label for="hr">HR (BPM)</label>
+          <input id="hr" type="number" min="0" max="250" step="1" placeholder="Contoh: 78">
+        </div>
+        <div>
+          <label for="temp">Temperatur (°C)</label>
+          <input id="temp" type="number" step="0.1" placeholder="Contoh: 36.5">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="saveBtn">Simpan</button>
+        <button id="randomBtn" class="secondary">Data Acak + Simpan</button>
+        <button id="connectBtn" class="secondary">Connect Bluetooth</button>
+        <button id="disconnectBtn" class="secondary" disabled>Putuskan Bluetooth</button>
+      </div>
+      <div class="status">
+        <span id="statusDot" class="dot"></span>
+        <span id="statusText">Bluetooth belum terhubung. Data manual/acak tetap dapat disimpan.</span>
+      </div>
+      <p class="note">
+        Tombol Data Acak + Simpan langsung membuat dan menyimpan data simulasi tanpa Bluetooth. Data manual juga dapat disimpan dengan tombol Simpan. Data Bluetooth akan mengisi HR dan Temperatur; isi Nama lalu tekan Simpan.
+        Data tersimpan di browser perangkat ini (localStorage), sehingga tetap ada saat halaman dibuka kembali di browser yang sama.
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="table-actions">
+        <h2 style="margin:0">Data Tersimpan</h2>
+        <span id="count" class="count">0 data</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>No.</th><th>Nama</th><th>HR (BPM)</th><th>Temperatur (°C)</th><th>Waktu</th></tr>
+          </thead>
+          <tbody id="dataBody">
+            <tr><td colspan="5" class="empty">Belum ada data. Isi data lalu tekan Simpan.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button id="downloadBtn">Download CSV</button>
+        <button id="clearBtn" class="danger">Hapus Semua Data</button>
+      </div>
+    </section>
+    <footer>Data disimpan secara lokal pada browser. Unduh CSV untuk membuat salinan file.</footer>
+  </main>
+
+<script>
+(() => {
+  "use strict";
+
+  // UUID harus sama dengan UUID BLE pada program ESP32.
+  // Default di bawah memakai layanan UART BLE (Nordic UART Service).
+  const SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+  const RX_CHARACTERISTIC_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+
+  const STORAGE_KEY = "monitoring_hr_temperatur_v1";
+  const $ = (id) => document.getElementById(id);
+  let records = loadRecords();
+  let bleDevice = null;
+  let notifyCharacteristic = null;
+  let receiveBuffer = "";
+
+  function loadRecords() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch (error) {
+      console.warn("Data lokal tidak dapat dibaca:", error);
+      return [];
+    }
+  }
+
+  function persistRecords() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    } catch (error) {
+      alert("Data tidak dapat disimpan. Periksa ruang penyimpanan browser.");
+      console.error(error);
+    }
+  }
+
+  function renderTable() {
+    const body = $("dataBody");
+    $("count").textContent = records.length + (records.length === 1 ? " data" : " data");
+    if (!records.length) {
+      body.innerHTML = '<tr><td colspan="5" class="empty">Belum ada data. Isi data lalu tekan Simpan.</td></tr>';
+      return;
+    }
+    body.innerHTML = records.map((item, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(item.nama)}</td>
+        <td>${escapeHtml(String(item.hr))}</td>
+        <td>${escapeHtml(String(item.temp))}</td>
+        <td>${escapeHtml(item.waktu)}</td>
+      </tr>`).join("");
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    })[char]);
+  }
+
+  function setStatus(message, connected = false) {
+    $("statusText").textContent = message;
+    $("statusDot").classList.toggle("connected", connected);
+    $("connectBtn").disabled = connected;
+    $("disconnectBtn").disabled = !connected;
+  }
+
+  function saveCurrentData() {
+    const nama = $("nama").value.trim();
+    const hr = Number($("hr").value);
+    const temp = Number($("temp").value);
+
+    if (!nama) return alert("Nama harus diisi terlebih dahulu.");
+    if ($("hr").value === "" || !Number.isFinite(hr) || hr < 0 || hr > 250)
+      return alert("Masukkan HR yang valid (0–250 BPM).");
+    if ($("temp").value === "" || !Number.isFinite(temp) || temp < -50 || temp > 150)
+      return alert("Masukkan temperatur yang valid.");
+
+    records.unshift({
+      nama, hr, temp,
+      waktu: new Date().toLocaleString("id-ID")
+    });
+    persistRecords();
+    renderTable();
+  }
+
+  function fillRandomData() {
+    // Data simulasi langsung disimpan; Bluetooth tidak diperlukan.
+    const nama = $("nama").value.trim() || "Data Uji";
+    const hr = Math.floor(60 + Math.random() * 41);       // 60–100 BPM
+    const temp = Number((36.0 + Math.random() * 1.1).toFixed(1)); // 36.0–37.0 °C
+
+    $("nama").value = nama;
+    $("hr").value = hr;
+    $("temp").value = temp;
+
+    records.unshift({
+      nama, hr, temp,
+      waktu: new Date().toLocaleString("id-ID")
+    });
+    persistRecords();
+    renderTable();
+    setStatus("Data acak berhasil disimpan tanpa Bluetooth.", false);
+  }
+
+  function handleBluetoothText(text) {
+    // Mendukung JSON: {"hr":78,"temp":36.5}
+    // atau teks sederhana: HR:78,TEMP:36.5
+    const clean = text.trim();
+    if (!clean) return;
+
+    let hr, temp;
+    try {
+      const obj = JSON.parse(clean);
+      hr = Number(obj.hr ?? obj.HR);
+      temp = Number(obj.temp ?? obj.temperature ?? obj.suhu ?? obj.Temp);
+    } catch (_) {
+      const hrMatch = clean.match(/(?:HR|BPM)\s*[:=,]\s*(-?\d+(?:\.\d+)?)/i);
+      const tempMatch = clean.match(/(?:TEMP|TEMPERATURE|SUHU)\s*[:=,]\s*(-?\d+(?:\.\d+)?)/i);
+      if (hrMatch) hr = Number(hrMatch[1]);
+      if (tempMatch) temp = Number(tempMatch[1]);
+      // Format CSV sederhana: 78,36.5
+      if ((!Number.isFinite(hr) || !Number.isFinite(temp)) && /^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(clean)) {
+        const parts = clean.split(",");
+        hr = Number(parts[0]);
+        temp = Number(parts[1]);
+      }
+    }
+
+    if (Number.isFinite(hr) && Number.isFinite(temp)) {
+      $("hr").value = hr;
+      $("temp").value = temp;
+      setStatus("Data sensor diterima. Isi Nama jika perlu, lalu tekan Simpan.", true);
+    }
+  }
+
+  function onBleNotification(event) {
+    const value = event.target.value;
+    receiveBuffer += new TextDecoder().decode(value);
+    // ESP32 disarankan mengirim satu baris JSON diakhiri newline.
+    const lines = receiveBuffer.split(/\r?\n/);
+    receiveBuffer = lines.pop() || "";
+    lines.forEach(handleBluetoothText);
+    // Jika perangkat mengirim satu paket tanpa newline, coba baca langsung.
+    if (!receiveBuffer.trim()) return;
+    if (receiveBuffer.length > 200) receiveBuffer = "";
+  }
+
+  async function connectBluetooth() {
+    if (!navigator.bluetooth) {
+      alert("Web Bluetooth tidak tersedia di browser ini. Coba Google Chrome di Android atau komputer, dan buka website melalui HTTPS (GitHub Pages).");
+      return;
+    }
+    try {
+      setStatus("Mencari perangkat Bluetooth...");
+      bleDevice = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [SERVICE_UUID] }],
+        optionalServices: [SERVICE_UUID]
+      });
+      bleDevice.addEventListener("gattserverdisconnected", () => {
+        notifyCharacteristic = null;
+        setStatus("Bluetooth terputus.", false);
+      });
+      const server = await bleDevice.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      notifyCharacteristic = await service.getCharacteristic(RX_CHARACTERISTIC_UUID);
+      await notifyCharacteristic.startNotifications();
+      notifyCharacteristic.addEventListener("characteristicvaluechanged", onBleNotification);
+      setStatus("Terhubung ke " + (bleDevice.name || "ESP32") + ". Menunggu data sensor...", true);
+    } catch (error) {
+      console.error(error);
+      setStatus("Bluetooth belum terhubung.", false);
+      if (error.name !== "NotFoundError") alert("Gagal menghubungkan Bluetooth: " + error.message);
+    }
+  }
+
+  async function disconnectBluetooth() {
+    if (bleDevice && bleDevice.gatt && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+    notifyCharacteristic = null;
+    setStatus("Bluetooth terputus.", false);
+  }
+
+  function downloadCSV() {
+    if (!records.length) return alert("Belum ada data untuk diunduh.");
+    const rows = [["No", "Nama", "HR (BPM)", "Temperatur (C)", "Waktu"]];
+    records.forEach((r, i) => rows.push([i + 1, r.nama, r.hr, r.temp, r.waktu]));
+    const csv = "\uFEFF" + rows.map(row =>
+      row.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(",")
+    ).join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data-monitoring-hr-temperatur.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  $("saveBtn").addEventListener("click", saveCurrentData);
+  $("randomBtn").addEventListener("click", fillRandomData);
+  $("connectBtn").addEventListener("click", connectBluetooth);
+  $("disconnectBtn").addEventListener("click", disconnectBluetooth);
+  $("downloadBtn").addEventListener("click", downloadCSV);
+  $("clearBtn").addEventListener("click", () => {
+    if (confirm("Yakin ingin menghapus semua data yang tersimpan di browser ini?")) {
+      records = [];
+      persistRecords();
+      renderTable();
+    }
+  });
+
+  renderTable();
+})();
+</script>
+</body>
+</html>
